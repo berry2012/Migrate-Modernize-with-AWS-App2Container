@@ -1,0 +1,171 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFormation template for deploying Java web application with Tomcat 11 and MySQL'
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair
+  
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t2.medium
+    ConstraintDescription: Must be a valid EC2 instance type
+  
+  MySQLPassword:
+    Description: Password for MySQL root user
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    MaxLength: 41
+    ConstraintDescription: Must be between 8 and 41 characters
+
+  ImageId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64
+    Description: Amazon Linux 2023 AMI ID
+
+Resources:
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP, HTTPS and SSH access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      SecurityGroups:
+        - !Ref WebServerSecurityGroup
+      KeyName: !Ref KeyName
+      ImageId: !Ref ImageId
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          
+          # Update system
+          dnf update -y
+          
+          # Install Java 21
+          dnf install -y java-21-amazon-corretto-devel
+          
+          # Install MySQL
+          dnf install -y mariadb105-server
+          systemctl enable mariadb
+          systemctl start mariadb
+          
+        
+          # Install Tomcat 11
+          mkdir -p /opt/tomcat
+          cd /opt/tomcat
+          wget https://dlcdn.apache.org/tomcat/tomcat-11/v11.0.7/bin/apache-tomcat-11.0.7.tar.gz
+          tar -xzf apache-tomcat-11.0.7.tar.gz --strip-components=1
+          rm apache-tomcat-11.0.7.tar.gz
+          
+          # Configure Tomcat
+          useradd -r tomcat
+          chown -R tomcat:tomcat /opt/tomcat
+          
+          # Create Tomcat service
+          cat > /etc/systemd/system/tomcat.service << 'EOL'
+          [Unit]
+          Description=Apache Tomcat Web Application Container
+          After=network.target
+          
+          [Service]
+          Type=forking
+          Environment="JAVA_HOME=/usr/lib/jvm/java-21-amazon-corretto"
+          Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
+          Environment="CATALINA_HOME=/opt/tomcat"
+          Environment="CATALINA_BASE=/opt/tomcat"
+          Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseParallelGC"
+          Environment="JAVA_OPTS=-Djava.awt.headless=true -Djava.security.egd=file:/dev/./urandom"
+          # Database environment variables
+          Environment="DB_URL=jdbc:mysql://localhost:3306/masterclassdb"
+          Environment="DB_USERNAME=root"
+          Environment="DB_PASSWORD=${MySQLPassword}"          
+          
+          ExecStart=/opt/tomcat/bin/startup.sh
+          ExecStop=/opt/tomcat/bin/shutdown.sh
+          
+          User=tomcat
+          Group=tomcat
+          UMask=0007
+          RestartSec=10
+          Restart=always
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOL
+          
+          # Start Tomcat service
+          systemctl daemon-reload
+          systemctl enable tomcat
+          systemctl start tomcat
+          
+          # Configure firewall if needed
+          if command -v firewall-cmd &> /dev/null; then
+            firewall-cmd --permanent --add-port=8080/tcp
+            firewall-cmd --reload
+          fi
+          
+          # Secure MySQL installation and create database
+          mysql -e "UPDATE mysql.user SET Password=PASSWORD('${MySQLPassword}') WHERE User='root';"
+          mysql -e "DELETE FROM mysql.user WHERE User='';"
+          mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');"
+          mysql -e "DROP DATABASE IF EXISTS test;"
+          mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
+          mysql -e "FLUSH PRIVILEGES;"
+          mysql -e "CREATE DATABASE masterclassdb;"
+          
+          # Create database schema
+          cat > /tmp/db_setup.sql << 'EOL'
+          USE masterclassdb;
+
+          CREATE TABLE IF NOT EXISTS users (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              first_name VARCHAR(50) NOT NULL,
+              last_name VARCHAR(50) NOT NULL,
+              email VARCHAR(100) NOT NULL UNIQUE,
+              password VARCHAR(100) NOT NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          INSERT INTO users (first_name, last_name, email, password) VALUES
+          ('John', 'Doe', 'john.doe@example.com', 'password123'),
+          ('Jane', 'Smith', 'jane.smith@example.com', 'password456');
+          EOL
+
+          mysql -u root -p${MySQLPassword} < /tmp/db_setup.sql
+
+          echo "Installation completed"
+      Tags:
+        - Key: Name
+          Value: JavaWebAppServer
+
+Outputs:
+  WebsiteURL:
+    Description: URL for the deployed web application
+    Value: !Sub http://${WebServerInstance.PublicDnsName}:8080
+  
+  SSHAccess:
+    Description: SSH command to access the instance
+    Value: !Sub ssh -i ${KeyName}.pem ec2-user@${WebServerInstance.PublicDnsName}

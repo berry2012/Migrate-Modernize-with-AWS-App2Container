@@ -1,0 +1,91 @@
+/* AWS Branded Colors CSS */
+:root {
+    --aws-orange: #FF9900;
+    --aws-smile-orange: #FF9900;
+    --aws-squid-ink: #232F3E;
+    --aws-anchor-blue: #0073BB;
+    --aws-anchor-blue-bright: #00A1C9;
+    --aws-anchor-blue-deep: #0073BB;
+    --aws-anchor-blue-light: #56C0E0;
+    --aws-anchor-blue-medium: #1166BB;
+    --aws-gray-light: #F2F3F3;
+    --aws-gray-medium: #D5DBDB;
+    --aws-gray-dark: #545B64;
+}
+
+body {
+    font-family: 'Amazon Ember', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: var(--aws-gray-light);
+    color: var(--aws-squid-ink);
+}
+
+.aws-header {
+    background-color: var(--aws-squid-ink);
+    color: white;
+    padding: 1rem;
+    text-align: center;
+}
+
+.aws-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.aws-button {
+    background-color: var(--aws-orange);
+    color: var(--aws-squid-ink);
+    border: none;
+    padding: 10px 20px;
+    border-radius: 3px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.aws-button:hover {
+    background-color: #ec7211;
+}
+
+.aws-link {
+    color: var(--aws-anchor-blue);
+    text-decoration: none;
+}
+
+.aws-link:hover {
+    text-decoration: underline;
+}
+
+.aws-form {
+    background-color: white;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.aws-form-group {
+    margin-bottom: 15px;
+}
+
+.aws-form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.aws-form-group input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--aws-gray-medium);
+    border-radius: 3px;
+}
+
+.aws-footer {
+    background-color: var(--aws-squid-ink);
+    color: white;
+    text-align: center;
+    padding: 1rem;
+    margin-top: 2rem;
+}
